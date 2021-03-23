@@ -66,6 +66,16 @@ def extract_HR(start_date, end_date):
             HR_list = np.delete(HR_list, remove_index)
             Timestamp_list = np.delete(Timestamp_list, remove_index)
 
+            start_of_day = dt2 = datetime.datetime.combine(curr_date, datetime.time(0, 0))
+            end_of_day = start_of_day + datetime.timedelta(days=1)
+            index = 0
+            for d in Timestamp_list:
+                if not start_of_day <= d <= end_of_day:
+                    # time_delta = (Timestamp_list[index+1]-Timestamp_list[index-1])/2
+                    time_delta = datetime.timedelta(minutes=1)
+                    Timestamp_list[index] = Timestamp_list[index-1] + time_delta
+                index += 1
+
             output_filename = 'HR CSV Data/' + str(curr_date) + '.csv'
             concatenated_data = {'Timestamp': Timestamp_list, 'Heart rate': HR_list}
             Output_df = pd.DataFrame(concatenated_data)
@@ -76,6 +86,4 @@ def extract_HR(start_date, end_date):
 
 if __name__ == '__main__':
     main()
-
-
     
