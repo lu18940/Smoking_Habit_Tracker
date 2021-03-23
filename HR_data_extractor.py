@@ -7,7 +7,7 @@ from datetime import timedelta, date
 
 def main():
     start_date = date(2021, 3, 15)
-    end_date = date(2021, 3, 16)
+    end_date = date(2021, 3, 20)
     extract_HR(start_date, end_date)
 
 def daterange(start_date, end_date):
@@ -16,10 +16,11 @@ def daterange(start_date, end_date):
 
 def extract_HR(start_date, end_date):
     UTC_REFERENCE = 631065600
-    Timestamp_list = np.empty([1,1])
-    HR_list = np.empty([1,1])
 
     for curr_date in daterange(start_date, end_date):
+        Timestamp_list = np.empty([1,1])
+        HR_list = np.empty([1,1])
+
         if os.path.exists('Garmin Raw Data/{}'.format(curr_date)):
             for i in range(1,10):
                 Garmin_data_filename = 'Garmin Raw Data/{}'.format(curr_date) +'/' + str(i) +'.csv'
@@ -65,11 +66,10 @@ def extract_HR(start_date, end_date):
             HR_list = np.delete(HR_list, remove_index)
             Timestamp_list = np.delete(Timestamp_list, remove_index)
 
-            export_filename = 'HR CSV Data/' + str(curr_date) + '.csv'
-
+            output_filename = 'HR CSV Data/' + str(curr_date) + '.csv'
             concatenated_data = {'Timestamp': Timestamp_list, 'Heart rate': HR_list}
-            HR_list_df = pd.DataFrame(concatenated_data)
-            HR_list_df.to_csv(export_filename)
+            Output_df = pd.DataFrame(concatenated_data)
+            Output_df.to_csv(output_filename)
 
         else:
             pass
