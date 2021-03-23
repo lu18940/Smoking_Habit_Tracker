@@ -1,0 +1,12 @@
+import numpy as np
+import datetime
+
+UTC_REFERENCE = 631065600
+
+timestamp = 984785100
+timestamp_16 = 43204
+
+ts_value = int(timestamp/2**16) * 2**16 + timestamp_16
+
+value = datetime.datetime.utcfromtimestamp(UTC_REFERENCE + ts_value)
+print(value)

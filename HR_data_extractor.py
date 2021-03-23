@@ -2,11 +2,12 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import datetime
 from datetime import timedelta, date
 
 def main():
     start_date = date(2021, 3, 15)
-    end_date = date(2021, 3, 20)
+    end_date = date(2021, 3, 16)
     extract_HR(start_date, end_date)
 
 def daterange(start_date, end_date):
@@ -14,6 +15,7 @@ def daterange(start_date, end_date):
         yield start_date + timedelta(n)
 
 def extract_HR(start_date, end_date):
+    UTC_REFERENCE = 631065600
     Timestamp_list = np.empty([1,1])
     HR_list = np.empty([1,1])
 
@@ -26,6 +28,24 @@ def extract_HR(start_date, end_date):
                     Garmin_df = pd.read_csv(Garmin_data_filename)
 
                     HR_df = Garmin_df.loc[Garmin_df['Field 2']=='heart_rate']
+                    Timestamp_df = Garmin_df.loc[Garmin_df['Field 1']=='timestamp']
+
+                    current_timestamp = 0
+
+                    for index, row in HR_df.iterrows():
+                        for time_index, time_row in Timestamp_df.iterrows():
+                            if time_index < index:
+                                current_timestamp = int(time_row['Value 1'])
+                            
+                            else:
+                                break
+
+                        current_timestamp_16 = int(row['Value 1'])
+
+                        ts_value = int(current_timestamp/2**16) * 2**16 + current_timestamp_16
+                        real_time = datetime.datetime.utcfromtimestamp(UTC_REFERENCE + ts_value)
+                        HR_df.loc[index, 'Value 1'] = real_time
+
                     temp_timestpamp_list = HR_df['Value 1'].to_numpy()
                     temp_HR_list = HR_df['Value 2'].to_numpy()
 
@@ -48,8 +68,8 @@ def extract_HR(start_date, end_date):
             export_filename = 'HR CSV Data/' + str(curr_date) + '.csv'
 
             concatenated_data = {'Timestamp': Timestamp_list, 'Heart rate': HR_list}
-            HR_df = pd.DataFrame(concatenated_data)
-            HR_df.to_csv(export_filename)
+            HR_list_df = pd.DataFrame(concatenated_data)
+            HR_list_df.to_csv(export_filename)
 
         else:
             pass
