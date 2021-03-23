@@ -6,8 +6,8 @@ import datetime
 from datetime import timedelta, date
 
 def main():
-    start_date = date(2021, 3, 15)
-    end_date = date(2021, 3, 20)
+    start_date = date(2021, 2, 1)
+    end_date = date(2021, 2, 8)
     extract_HR(start_date, end_date)
 
 def daterange(start_date, end_date):
@@ -22,7 +22,7 @@ def extract_HR(start_date, end_date):
         HR_list = np.empty([1,1])
 
         if os.path.exists('Garmin Raw Data/{}'.format(curr_date)):
-            for i in range(1,10):
+            for i in range(1,15):
                 Garmin_data_filename = 'Garmin Raw Data/{}'.format(curr_date) +'/' + str(i) +'.csv'
                 
                 if os.path.exists(Garmin_data_filename):
