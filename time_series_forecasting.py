@@ -81,7 +81,8 @@ class WindowGenerator():
             if n == 0:
                 plt.legend()
 
-        plt.xlabel('Time [h]')
+        plt.xlabel('Number of timesteps')
+        plt.show()
     
     def make_dataset(self, data):
         data = np.array(data, dtype=np.float32)
@@ -127,8 +128,55 @@ class WindowGenerator():
             f'Label indices: {self.label_indices}',
             f'Label column name(s): {self.label_columns}'])
 
+
+# Baseline model that just returns the current temperature as the prediction, predicting "No change"
+class Baseline(tf.keras.Model):
+  def __init__(self, label_index=None):
+    super().__init__()
+    self.label_index = label_index
+
+  def call(self, inputs):
+    if self.label_index is None:
+      return inputs
+    result = inputs[:, :, self.label_index]
+    return result[:, :, tf.newaxis]
+
+class ResidualWrapper(tf.keras.Model):
+  def __init__(self, model):
+    super().__init__()
+    self.model = model
+
+  def call(self, inputs, *args, **kwargs):
+    delta = self.model(inputs, *args, **kwargs)
+
+    # The prediction for each timestep is the input
+    # from the previous time step plus the delta
+    # calculated by the model.
+    return inputs + delta
+
+def compile_and_fit(model, window, patience=2):
+    MAX_EPOCHS = 100
+    early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+                                                    patience=patience,
+                                                    mode='min')
+
+    model.compile(loss=tf.losses.MeanSquaredError(),
+                optimizer=tf.optimizers.Adam(),
+                metrics=[tf.metrics.MeanAbsoluteError()])
+
+    history = model.fit(window.train, epochs=MAX_EPOCHS,
+                        validation_data=window.val,
+                        callbacks=[early_stopping])
+    return history
+
+
 def main():
+    # noon2noon data
     df = pd.read_csv('noon2noon_data/noon2noon_2021-02-01.csv')
+    # midnight2midnight data
+    # df = pd.read_csv('HR_CSV_Data/2021-02-01.csv')
+
+    NUM_TIMESTEPS = df.shape[0]
 
     # timestamps = hr_df['Timestamp'].to_list()
     date_time = pd.to_datetime(df.pop('Timestamp'), format='%Y.%m.%d %H:%M:%S')
@@ -168,20 +216,86 @@ def main():
     # _ = ax.set_xticklabels(df.keys(), rotation=90)
     # plt.show()
 
-    w2 = WindowGenerator(input_width=6, label_width=1, shift=1, train_df=train_df, 
-                         val_df=val_df, test_df=test_df, label_columns=['Heart rate'])
+    single_step_window = WindowGenerator(
+        input_width=1, label_width=1, shift=1, train_df=train_df, 
+        val_df=val_df, test_df=test_df, label_columns=['Heart rate'])
 
-    example_window = tf.stack([np.array(train_df[:w2.total_window_size]),
-                           np.array(train_df[100:100+w2.total_window_size]),
-                           np.array(train_df[200:200+w2.total_window_size])])
+    baseline = Baseline(label_index=column_indices['Heart rate'])
+    baseline.compile(loss=tf.losses.MeanSquaredError(),
+                 metrics=[tf.metrics.MeanAbsoluteError()])
 
-    example_inputs, example_labels = w2.split_window(example_window)
+    val_performance = {}
+    performance = {}
+    val_performance['Baseline'] = baseline.evaluate(single_step_window.val)
+    performance['Baseline'] = baseline.evaluate(single_step_window.test, verbose=0)
 
-    # w2.example = example_inputs, example_labels
-    # w2.plot()
-    # plt.show()
-    w2.train.element_spec
+    wide_window = WindowGenerator(
+    input_width=24, label_width=24, shift=1, train_df=train_df, 
+    val_df=val_df, test_df=test_df, label_columns=['Heart rate'])
 
+    # wide_window.plot(baseline)
+
+    CONV_WIDTH = 3
+    conv_window = WindowGenerator(
+        input_width=CONV_WIDTH,
+        label_width=1,
+        shift=1,
+        train_df=train_df,
+        val_df=val_df,
+        test_df=test_df,
+        label_columns=['Heart rate'])
+
+    LABEL_WIDTH = 24
+    INPUT_WIDTH = LABEL_WIDTH + (CONV_WIDTH - 1)
+    wide_conv_window = WindowGenerator(
+        input_width=INPUT_WIDTH,
+        label_width=LABEL_WIDTH,
+        shift=1,
+        train_df=train_df,
+        val_df=val_df,
+        test_df=test_df,
+        label_columns=['Heart rate'])
+
+    conv_model = tf.keras.Sequential([
+        tf.keras.layers.Conv1D(filters=32,
+                            kernel_size=(CONV_WIDTH,),
+                            activation='relu'),
+        tf.keras.layers.Dense(units=32, activation='relu'),
+        tf.keras.layers.Dense(units=1),
+    ])
+
+    history = compile_and_fit(conv_model, conv_window)
+    val_performance['Conv'] = conv_model.evaluate(conv_window.val)
+    performance['Conv'] = conv_model.evaluate(conv_window.test, verbose=0)
+    # wide_conv_window.plot(conv_model)
+
+    lstm_model = tf.keras.models.Sequential([
+        # Shape [batch, time, features] => [batch, time, lstm_units]
+        tf.keras.layers.LSTM(32, return_sequences=True),
+        # Shape => [batch, time, features]
+        tf.keras.layers.Dense(units=1)
+    ])
+
+    history = compile_and_fit(lstm_model, wide_window)
+    val_performance['LSTM'] = lstm_model.evaluate(wide_window.val)
+    performance['LSTM'] = lstm_model.evaluate(wide_window.test, verbose=0)
+
+    # wide_window.plot(lstm_model)
+
+    x = np.arange(len(performance))
+    width = 0.3
+    metric_name = 'mean_absolute_error'
+    metric_index = lstm_model.metrics_names.index('mean_absolute_error')
+    val_mae = [v[metric_index] for v in val_performance.values()]
+    test_mae = [v[metric_index] for v in performance.values()]
+
+    plt.ylabel('mean_absolute_error [Heart rate, normalized]')
+    plt.bar(x - 0.17, val_mae, width, label='Validation')
+    plt.bar(x + 0.17, test_mae, width, label='Test')
+    plt.xticks(ticks=x, labels=performance.keys(),
+            rotation=45)
+    _ = plt.legend()
+    plt.show()
 
 if __name__ == '__main__':
     main()
