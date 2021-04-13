@@ -141,8 +141,21 @@ class Baseline(tf.keras.Model):
     result = inputs[:, :, self.label_index]
     return result[:, :, tf.newaxis]
 
+class ResidualWrapper(tf.keras.Model):
+  def __init__(self, model):
+    super().__init__()
+    self.model = model
+
+  def call(self, inputs, *args, **kwargs):
+    delta = self.model(inputs, *args, **kwargs)
+
+    # The prediction for each timestep is the input
+    # from the previous time step plus the delta
+    # calculated by the model.
+    return inputs + delta
+
 def compile_and_fit(model, window, patience=2):
-    MAX_EPOCHS = 50
+    MAX_EPOCHS = 100
     early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
                                                     patience=patience,
                                                     mode='min')
@@ -217,12 +230,12 @@ def main():
     performance['Baseline'] = baseline.evaluate(single_step_window.test, verbose=0)
 
     wide_window = WindowGenerator(
-    input_width=50, label_width=50, shift=1, train_df=train_df, 
+    input_width=24, label_width=24, shift=1, train_df=train_df, 
     val_df=val_df, test_df=test_df, label_columns=['Heart rate'])
 
     # wide_window.plot(baseline)
 
-    CONV_WIDTH = 4
+    CONV_WIDTH = 3
     conv_window = WindowGenerator(
         input_width=CONV_WIDTH,
         label_width=1,
@@ -232,7 +245,7 @@ def main():
         test_df=test_df,
         label_columns=['Heart rate'])
 
-    LABEL_WIDTH = 50
+    LABEL_WIDTH = 24
     INPUT_WIDTH = LABEL_WIDTH + (CONV_WIDTH - 1)
     wide_conv_window = WindowGenerator(
         input_width=INPUT_WIDTH,
@@ -252,11 +265,37 @@ def main():
     ])
 
     history = compile_and_fit(conv_model, conv_window)
-
     val_performance['Conv'] = conv_model.evaluate(conv_window.val)
     performance['Conv'] = conv_model.evaluate(conv_window.test, verbose=0)
+    # wide_conv_window.plot(conv_model)
 
-    wide_conv_window.plot(conv_model)
+    lstm_model = tf.keras.models.Sequential([
+        # Shape [batch, time, features] => [batch, time, lstm_units]
+        tf.keras.layers.LSTM(32, return_sequences=True),
+        # Shape => [batch, time, features]
+        tf.keras.layers.Dense(units=1)
+    ])
+
+    history = compile_and_fit(lstm_model, wide_window)
+    val_performance['LSTM'] = lstm_model.evaluate(wide_window.val)
+    performance['LSTM'] = lstm_model.evaluate(wide_window.test, verbose=0)
+
+    # wide_window.plot(lstm_model)
+
+    x = np.arange(len(performance))
+    width = 0.3
+    metric_name = 'mean_absolute_error'
+    metric_index = lstm_model.metrics_names.index('mean_absolute_error')
+    val_mae = [v[metric_index] for v in val_performance.values()]
+    test_mae = [v[metric_index] for v in performance.values()]
+
+    plt.ylabel('mean_absolute_error [Heart rate, normalized]')
+    plt.bar(x - 0.17, val_mae, width, label='Validation')
+    plt.bar(x + 0.17, test_mae, width, label='Test')
+    plt.xticks(ticks=x, labels=performance.keys(),
+            rotation=45)
+    _ = plt.legend()
+    plt.show()
 
 if __name__ == '__main__':
     main()
