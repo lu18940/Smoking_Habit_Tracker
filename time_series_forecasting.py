@@ -141,10 +141,7 @@ class Baseline(tf.keras.Model):
     result = inputs[:, :, self.label_index]
     return result[:, :, tf.newaxis]
 
-<<<<<<< HEAD
 
-=======
->>>>>>> parent of 50ac6c5 (Working for baseline, CNN and RNN.)
 def compile_and_fit(model, window, patience=2):
     MAX_EPOCHS = 50
     early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
@@ -256,11 +253,21 @@ def main():
     ])
 
     history = compile_and_fit(conv_model, conv_window)
-
     val_performance['Conv'] = conv_model.evaluate(conv_window.val)
     performance['Conv'] = conv_model.evaluate(conv_window.test, verbose=0)
+    # wide_conv_window.plot(conv_model)
 
-    wide_conv_window.plot(conv_model)
+    lstm_model = tf.keras.models.Sequential([
+        # Shape [batch, time, features] => [batch, time, lstm_units]
+        tf.keras.layers.LSTM(32, return_sequences=True),
+        # Shape => [batch, time, features]
+        tf.keras.layers.Dense(units=1)
+    ])
+
+    history = compile_and_fit(lstm_model, wide_window)
+    val_performance['LSTM'] = lstm_model.evaluate(wide_window.val)
+    performance['LSTM'] = lstm_model.evaluate(wide_window.test, verbose=0)
+    wide_window.plot(lstm_model)
 
 if __name__ == '__main__':
     main()
