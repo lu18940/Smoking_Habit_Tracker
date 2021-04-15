@@ -51,7 +51,7 @@ class WindowGenerator():
 
         return inputs, labels
     
-    def plot(self, model=None, plot_col='Heart rate', max_subplots=1):
+    def plot(self, model=None, plot_col='Heart rate', max_subplots=3):
         inputs, labels = self.example
         plt.figure(figsize=(12, 8))
         plot_col_index = self.column_indices[plot_col]
@@ -159,15 +159,13 @@ def compile_and_fit(model, window, patience=2):
 
 
 def main():
-    # noon2noon data
-    df = pd.read_csv('noon2noon_data/noon2noon_2021-02-01.csv')
-    # midnight2midnight data
-    # df = pd.read_csv('HR_CSV_Data/2021-02-01.csv')
+    df = pd.read_csv('forecasting_example_data.csv')
 
     NUM_TIMESTEPS = df.shape[0]
 
     # timestamps = hr_df['Timestamp'].to_list()
-    date_time = pd.to_datetime(df.pop('Timestamp'), format='%Y.%m.%d %H:%M:%S')
+    # date_time = pd.to_datetime(df.pop('Timestamp'), format='%Y.%m.%d %H:%M:%S')
+    date_time = pd.to_datetime(df.pop('Timestamp'), format='%d/%m/%Y %H:%M')
     timestamp_s = date_time.map(datetime.datetime.timestamp)
 
     day = 24*60*60
@@ -184,18 +182,22 @@ def main():
     column_indices = {name: i for i, name in enumerate(df.columns)}
 
     n = len(df)
-    train_df = df[0:int(n*0.7)]
-    val_df = df[int(n*0.7):int(n*0.9)]
-    test_df = df[int(n*0.9):]
+    # train_df = df[0:int(n*0.7)]
+    # val_df = df[int(n*0.7):int(n*0.9)]
+    # test_df = df[int(n*0.9):]
+
+    train_df = df[int(n*0.3):]
+    val_df = df[int(n*0.1):int(n*0.3)]
+    test_df = df[0:int(n*0.1)]
 
     num_features = df.shape[1]
 
     train_mean = train_df.mean()
     train_std = train_df.std()
 
-    train_df = (train_df - train_mean) / train_std
-    val_df = (val_df - train_mean) / train_std
-    test_df = (test_df - train_mean) / train_std    
+    # train_df = (train_df - train_mean) / train_std
+    # val_df = (val_df - train_mean) / train_std
+    # test_df = (test_df - train_mean) / train_std
 
     df_std = (df - train_mean) / train_std
     df_std = df_std.melt(var_name='Column', value_name='Normalized')
@@ -218,56 +220,56 @@ def main():
     performance['Baseline'] = baseline.evaluate(single_step_window.test, verbose=0)
 
     wide_window = WindowGenerator(
-    input_width=50, label_width=50, shift=1, train_df=train_df, 
+    input_width=25, label_width=25, shift=1, train_df=train_df, 
     val_df=val_df, test_df=test_df, label_columns=['Heart rate'])
 
-    # wide_window.plot(baseline)
+    wide_window.plot(baseline)
 
-    CONV_WIDTH = 4
-    conv_window = WindowGenerator(
-        input_width=CONV_WIDTH,
-        label_width=1,
-        shift=1,
-        train_df=train_df,
-        val_df=val_df,
-        test_df=test_df,
-        label_columns=['Heart rate'])
+    # CONV_WIDTH = 4
+    # conv_window = WindowGenerator(
+    #     input_width=CONV_WIDTH,
+    #     label_width=1,
+    #     shift=1,
+    #     train_df=train_df,
+    #     val_df=val_df,
+    #     test_df=test_df,
+    #     label_columns=['Heart rate'])
 
-    LABEL_WIDTH = 50
-    INPUT_WIDTH = LABEL_WIDTH + (CONV_WIDTH - 1)
-    wide_conv_window = WindowGenerator(
-        input_width=INPUT_WIDTH,
-        label_width=LABEL_WIDTH,
-        shift=1,
-        train_df=train_df,
-        val_df=val_df,
-        test_df=test_df,
-        label_columns=['Heart rate'])
+    # LABEL_WIDTH = 25
+    # INPUT_WIDTH = LABEL_WIDTH + (CONV_WIDTH - 1)
+    # wide_conv_window = WindowGenerator(
+    #     input_width=INPUT_WIDTH,
+    #     label_width=LABEL_WIDTH,
+    #     shift=1,
+    #     train_df=train_df,
+    #     val_df=val_df,
+    #     test_df=test_df,
+    #     label_columns=['Heart rate'])
 
-    conv_model = tf.keras.Sequential([
-        tf.keras.layers.Conv1D(filters=32,
-                            kernel_size=(CONV_WIDTH,),
-                            activation='relu'),
-        tf.keras.layers.Dense(units=32, activation='relu'),
-        tf.keras.layers.Dense(units=1),
-    ])
+    # conv_model = tf.keras.Sequential([
+    #     tf.keras.layers.Conv1D(filters=32,
+    #                         kernel_size=(CONV_WIDTH,),
+    #                         activation='relu'),
+    #     tf.keras.layers.Dense(units=32, activation='relu'),
+    #     tf.keras.layers.Dense(units=1),
+    # ])
 
-    history = compile_and_fit(conv_model, conv_window)
-    val_performance['Conv'] = conv_model.evaluate(conv_window.val)
-    performance['Conv'] = conv_model.evaluate(conv_window.test, verbose=0)
-    # wide_conv_window.plot(conv_model)
+    # history = compile_and_fit(conv_model, conv_window)
+    # val_performance['Conv'] = conv_model.evaluate(conv_window.val)
+    # performance['Conv'] = conv_model.evaluate(conv_window.test, verbose=0)
+    # # wide_conv_window.plot(conv_model)
 
-    lstm_model = tf.keras.models.Sequential([
-        # Shape [batch, time, features] => [batch, time, lstm_units]
-        tf.keras.layers.LSTM(32, return_sequences=True),
-        # Shape => [batch, time, features]
-        tf.keras.layers.Dense(units=1)
-    ])
+    # lstm_model = tf.keras.models.Sequential([
+    #     # Shape [batch, time, features] => [batch, time, lstm_units]
+    #     tf.keras.layers.LSTM(32, return_sequences=True),
+    #     # Shape => [batch, time, features]
+    #     tf.keras.layers.Dense(units=1)
+    # ])
 
-    history = compile_and_fit(lstm_model, wide_window)
-    val_performance['LSTM'] = lstm_model.evaluate(wide_window.val)
-    performance['LSTM'] = lstm_model.evaluate(wide_window.test, verbose=0)
-    wide_window.plot(lstm_model)
+    # history = compile_and_fit(lstm_model, wide_window)
+    # val_performance['LSTM'] = lstm_model.evaluate(wide_window.val)
+    # performance['LSTM'] = lstm_model.evaluate(wide_window.test, verbose=0)
+    # wide_window.plot(lstm_model)
 
 if __name__ == '__main__':
     main()
